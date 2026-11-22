@@ -29,10 +29,19 @@ def apply_shift(shift_id):
         return redirect(url_for('main.project_detail', project_id=shift.project_id))
 
     # Проверка возраста (FR-21)
-    if current_user.age < shift.min_age:
-        flash(f'Данный проект рассчитан на участников от {shift.min_age} лет. Ваш возраст: {current_user.age}.', 'danger')
+    # Проверяем, указана ли дата рождения
+    if current_user.birth_date is None:
+        flash('Для записи на смену сначала укажите дату рождения в профиле.', 'warning')
         return redirect(url_for('main.project_detail', project_id=shift.project_id))
 
+    # Проверяем минимальный возраст
+    if current_user.age < shift.min_age:
+        flash(
+            f'Данный проект рассчитан на участников от {shift.min_age} лет. '
+            f'Ваш возраст: {current_user.age}.',
+            'danger'
+        )
+        return redirect(url_for('main.project_detail', project_id=shift.project_id))
     # Для несовершеннолетних (<18) требуется согласие родителей (FR-21)
     parent_consent = request.form.get('parent_consent') == 'on'
     if current_user.is_minor and not parent_consent:

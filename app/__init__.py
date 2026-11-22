@@ -18,19 +18,13 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Database initialization with automatic fallback if PostgreSQL fails
+    # Инициализация базы данных и авторизации
     db.init_app(app)
     login_manager.init_app(app)
 
     with app.app_context():
-        # Test connection; if fails (e.g. Postgres DB not created yet), fallback to SQLite
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-        except Exception as e:
-            print(f"[WARNING] Database connection failed ({e}). Falling back to SQLite (sqlite:///app.db)...")
-            app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-            db.init_app(app)
+        with db.engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
 
         # Register Blueprints
         from app.routes.auth import auth_bp
