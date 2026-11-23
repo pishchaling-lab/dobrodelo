@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask_login import current_user
 from app.models import Project, Shift, Organization
 
 main_bp = Blueprint('main', __name__)
@@ -13,9 +14,9 @@ def index():
 
     # Статистика для лендинга
     stats = {
-        'projects_count': Project.query.count(),
+        'projects_count': Project.query.join(Organization).filter(Organization.is_verified == True).count(),
         'orgs_count': Organization.query.filter_by(is_verified=True).count(),
-        'shifts_count': Shift.query.count()
+        'shifts_count': Shift.query.join(Project).join(Organization).filter(Organization.is_verified == True).count()
     }
     return render_template('index.html', projects=featured_projects, stats=stats)
 
@@ -46,4 +47,11 @@ def catalog():
 @main_bp.route('/project/<int:project_id>')
 def project_detail(project_id):
     project = Project.query.get_or_404(project_id)
+    # Проекты неверифицированных организаций видны только админу и владельцу
+    if not project.organization.is_verified:
+        is_admin = current_user.is_authenticated and current_user.role == 'admin'
+        is_owner = current_user.is_authenticated and project.organization.owner_id == current_user.id
+        if not (is_admin or is_owner):
+            flash('Проект пока недоступен для просмотра, так как организация не верифицирована.', 'warning')
+            return redirect(url_for('main.catalog'))
     return render_template('project_detail.html', project=project)
