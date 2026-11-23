@@ -10,7 +10,13 @@
         <span>/</span>
         <span class="text-slate-800 font-medium">{{ project.title }}</span>
     </div>
-
+    {% if not project.organization.is_verified %}
+    <div class="mb-6 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 text-sm flex items-center gap-3">
+        <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
+        <span>Организация ещё не верифицирована — проект пока скрыт из каталога.</span>
+    </div>
+    {% endif %}
+    
     <!-- Заголовок и карточка проекта -->
     <div class="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm mb-8">
         <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
@@ -21,9 +27,27 @@
                 <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2">{{ project.title }}</h1>
             </div>
             <div class="text-right">
-                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Набор открыт
-                </span>
+                    {% if project.status == 'open' %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Набор открыт
+                    </span>
+                    {% elif project.status == 'closed' %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        <span class="w-2 h-2 rounded-full bg-amber-500"></span> Набор закрыт
+                    </span>
+                    {% elif project.status == 'completed' %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                        <span class="w-2 h-2 rounded-full bg-slate-500"></span> Завершён
+                    </span>
+                    {% elif project.status == 'cancelled' %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                        <span class="w-2 h-2 rounded-full bg-rose-500"></span> Отменён
+                    </span>
+                    {% elif project.status == 'draft' %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
+                        <span class="w-2 h-2 rounded-full bg-slate-400"></span> Черновик
+                    </span>
+                    {% endif %}
             </div>
         </div>
 
@@ -75,6 +99,7 @@
                     </div>
 
                     <div>
+                        {% if project.status == 'open' and project.organization.is_verified %}
                         {% if current_user.is_authenticated %}
                             {% if current_user.role == 'volunteer' %}
                                 {% if shift.available_places > 0 %}
@@ -99,9 +124,14 @@
                                 <span class="text-xs text-slate-400 italic">Запись доступна для волонтёров</span>
                             {% endif %}
                         {% else %}
-                            <a href="{{ url_for('auth.login') }}" class="px-5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-semibold transition">
+                            <a href="{{url_for('auth.login', next=request.path) }" class="px-5 py-2.5 bg-brand-50 hover:bg-brand-100 text-brand-700 rounded-xl text-xs font-semibold transition">
                                 Войдите для записи
                             </a>
+                        {% endif %}
+                        {% else %}
+                            <span class="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-semibold">
+                                Запись недоступна
+                            </span>
                         {% endif %}
                     </div>
                 </div>

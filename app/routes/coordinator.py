@@ -7,7 +7,13 @@ coordinator_bp = Blueprint('coordinator', __name__)
 
 def check_coordinator():
     if current_user.role not in ['coordinator', 'admin']:
-        abort(403)
+      abort(403)
+# Проверка прав на проект (админ или владелец организации)
+def check_project_owner(project):  
+    if current_user.role != 'admin' and project.organization.owner_id != current_user.id:
+        flash('У вас нет прав для управления этим проектом.', 'danger')
+        return False
+    return True
 
 @coordinator_bp.route('/dashboard')
 @login_required
@@ -46,6 +52,10 @@ def create_project():
 
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
+        # Проверяем, что название проекта заполнено
+        if not title:
+            flash('Название проекта не может быть пустым.', 'danger')
+            return redirect(url_for('coordinator.create_project'))
         description = request.form.get('description', '').strip()
         category = request.form.get('category', 'Экология')
         city = request.form.get('city', org.city).strip()
@@ -73,17 +83,24 @@ def create_project():
 def create_shift(project_id):
     check_coordinator()
     project = Project.query.get_or_404(project_id)
+    if not check_project_owner(project):
+        return redirect(url_for('coordinator.dashboard'))
 
     if request.method == 'POST':
-        date_str = request.form.get('date')
+       date_str = request.form.get('date', '')
         start_time = request.form.get('start_time', '10:00')
         end_time = request.form.get('end_time', '14:00')
         location = request.form.get('location', project.address)
-        max_volunteers = int(request.form.get('max_volunteers', 10))
-        hours = float(request.form.get('hours', 4.0))
-        min_age = int(request.form.get('min_age', 14))
 
-        shift_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        # Проверяем корректность даты и числовых полей
+        try:
+            max_volunteers = int(request.form.get('max_volunteers', 10))
+            hours = float(request.form.get('hours', 4.0))
+            min_age = int(request.form.get('min_age', 14))
+            shift_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash('Проверьте корректность даты и числовых полей (участники, часы, возраст).', 'danger')
+            return redirect(url_for('coordinator.create_shift', project_id=project.id))
 
         shift = Shift(
             project_id=project.id,
@@ -107,6 +124,8 @@ def create_shift(project_id):
 def shift_applications(shift_id):
     check_coordinator()
     shift = Shift.query.get_or_404(shift_id)
+    if not check_project_owner(shift.project):
+        return redirect(url_for('coordinator.dashboard'))
     applications = Application.query.filter_by(shift_id=shift.id).all()
     return render_template('coordinator/shift_applications.html', shift=shift, applications=applications)
 
@@ -115,7 +134,18 @@ def shift_applications(shift_id):
 def update_application_status(app_id, new_status):
     check_coordinator()
     application = Application.query.get_or_404(app_id)
+    if not check_project_owner(application.shift.project):
+        return redirect(url_for('coordinator.dashboard'))
     if new_status in ['approved', 'rejected', 'cancelled']:
+        # При одобрении проверяем, не достигнут ли лимит мест на смене
+        if new_status == 'approved' and application.status != 'approved':
+            approved_count = Application.query.filter(
+                Application.shift_id == application.shift_id,
+                Application.status.in_(['approved', 'attended'])
+            ).count()
+            if approved_count >= application.shift.max_volunteers:
+                flash('Лимит волонтёров на эту смену уже достигнут.', 'warning')
+                return redirect(url_for('coordinator.shift_applications', shift_id=application.shift_id))
         application.status = new_status
         db.session.commit()
         flash(f'Статус заявки изменен на: {new_status}.', 'info')
@@ -129,7 +159,14 @@ def shift_attendance(shift_id):
     """
     check_coordinator()
     shift = Shift.query.get_or_404(shift_id)
-    applications = Application.query.filter_by(shift_id=shift.id).all()
+   if not check_project_owner(shift.project):
+        return redirect(url_for('coordinator.dashboard'))
+
+    # Показываем только одобренные заявки и заявки с уже отмеченной явкой
+    applications = Application.query.filter(
+        Application.shift_id == shift.id,
+        Application.status.in_(['approved', 'attended', 'no_show'])
+    ).all()
 
     if request.method == 'POST':
         for app in applications:

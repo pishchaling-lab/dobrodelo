@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime
+from urllib.parse import urlparse
 from app.models import db, User, Organization
 
 auth_bp = Blueprint('auth', __name__)
@@ -17,6 +18,9 @@ def login():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
+        if not email or not password:
+            flash('Пожалуйста, заполните email и пароль.', 'danger')
+            return render_template('auth/login.html')
         user = User.query.filter_by(email=email).first()
 
         if user and user.check_password(password):
@@ -24,7 +28,9 @@ def login():
             flash(f'Добро пожаловать, {user.full_name}!', 'success')
             next_page = request.args.get('next')
             if next_page:
-                return redirect(next_page)
+                parsed_next = urlparse(next_page)
+                if not parsed_next.netloc and not parsed_next.scheme and parsed_next.path.startswith('/'):
+                    return redirect(next_page)
             if user.role == 'admin':
                 return redirect(url_for('admin.dashboard'))
             elif user.role == 'coordinator':
@@ -45,6 +51,12 @@ def register():
         password = request.form.get('password', '')
         full_name = request.form.get('full_name', '').strip()
         role = request.form.get('role', 'volunteer')
+        if not email or not password or not full_name:
+            flash('Пожалуйста, заполните все обязательные поля.', 'warning')
+            return redirect(url_for('auth.register'))
+        if role not in ('volunteer', 'coordinator'):
+            flash('Выбрана недопустимая роль.', 'warning')
+            return redirect(url_for('auth.register'))
         city = request.form.get('city', 'Москва').strip()
         birth_date_str = request.form.get('birth_date')
         phone = request.form.get('phone', '').strip()
@@ -87,7 +99,7 @@ def register():
             db.session.commit()
             flash('Регистрация успешна! Ваша организация отправлена на проверку модератором.', 'info')
         else:
-            flash('Регистрация успешна! Теперь вы можете войти в систему.', 'success')
+            flash('Регистрация успешна! Вы вошли в систему.', 'success')
 
         login_user(user)
         return redirect(url_for('main.index'))
