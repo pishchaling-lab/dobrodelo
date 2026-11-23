@@ -8,6 +8,11 @@ volunteer_bp = Blueprint('volunteer', __name__)
 @volunteer_bp.route('/dashboard')
 @login_required
 def dashboard():
+    # Проверка роли волонтёра
+    if current_user.role != 'volunteer':
+        flash('Доступ разрешён только волонтёрам.', 'danger')
+        return redirect(url_for('main.index'))
+        
     applications = Application.query.filter_by(volunteer_id=current_user.id).order_by(Application.applied_at.desc()).all()
     total_hours = current_user.total_hours
     attended_count = sum(1 for a in applications if a.status == 'attended')
@@ -20,7 +25,16 @@ def dashboard():
 @volunteer_bp.route('/apply/<int:shift_id>', methods=['POST'])
 @login_required
 def apply_shift(shift_id):
+    # Проверка роли волонтёра
+    if current_user.role != 'volunteer':
+        flash('Доступ разрешён только волонтёрам.', 'danger')
+        return redirect(url_for('main.index'))
+        
     shift = Shift.query.get_or_404(shift_id)
+    # Проверяем, что организация верифицирована и проект открыт
+    if not shift.project.organization.is_verified or shift.project.status != 'open':
+        flash('Запись на этот проект сейчас недоступна.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=shift.project_id))
 
     # Проверка на повторную подачу
     existing_app = Application.query.filter_by(shift_id=shift.id, volunteer_id=current_user.id).first()
@@ -30,7 +44,7 @@ def apply_shift(shift_id):
 
     # Проверка возраста (FR-21)
     # Проверяем, указана ли дата рождения
-    if current_user.birth_date is None:
+    if current_user.birth_date is None or current_user.age is None:
         flash('Для записи на смену сначала укажите дату рождения в профиле.', 'warning')
         return redirect(url_for('main.project_detail', project_id=shift.project_id))
 
@@ -69,11 +83,20 @@ def apply_shift(shift_id):
 @volunteer_bp.route('/cancel/<int:app_id>', methods=['POST'])
 @login_required
 def cancel_application(app_id):
+    # Проверка роли волонтёра
+    if current_user.role != 'volunteer':
+        flash('Доступ разрешён только волонтёрам.', 'danger')
+        return redirect(url_for('main.index'))
+        
     application = Application.query.get_or_404(app_id)
     if application.volunteer_id != current_user.id:
         flash('Доступ запрещен.', 'danger')
         return redirect(url_for('volunteer.dashboard'))
-
+    # Запрещаем отменять уже посещённую заявку
+    if application.status == 'attended':
+        flash('Нельзя отменить заявку, по которой уже отмечено посещение.', 'warning')
+        return redirect(url_for('volunteer.dashboard'))
+        
     application.status = 'cancelled'
     db.session.commit()
     flash('Запись на смену успешно отменена.', 'info')
@@ -82,6 +105,11 @@ def cancel_application(app_id):
 @volunteer_bp.route('/certificate')
 @login_required
 def certificate():
+    # Проверка роли волонтёра
+    if current_user.role != 'volunteer':
+        flash('Доступ разрешён только волонтёрам.', 'danger')
+        return redirect(url_for('main.index'))
+        
     completed_apps = Application.query.filter_by(
         volunteer_id=current_user.id,
         status='attended'
